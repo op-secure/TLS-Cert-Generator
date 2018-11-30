@@ -20,7 +20,7 @@ function createcert() {
 	# CA cert, CA key, read-cert-details
 	if [[ ! -z "$1" && ! -z "$2" ]]; then
 		#ls output &> /dev/null || mkdir output &> /dev/null
-		certtype=$(dialog --title "Select cert type" --menu "Please select the type of certificate to generate:" 40 40 3 1 Client 2 Server 3 "Client & server" --stdout)
+		certtype=$(dialog --title "Select cert type" --menu "Please select the type of certificate to generate:" 40 40 3 1 Client 2 Server 3 "Client & server (no SANs)" --stdout)
 		certname=$(dialog --title "Cert name" --inputbox "Please enter a name for the certificate (no extensions):" 40 40 --stdout)
 		country=$(dialog --title "Distinguished name" --inputbox "Please enter a country (2 chars only, or leave blank)" 10 40 --stdout)
 		stateProv=$(dialog --title "Distinguished name" --inputbox "Please enter a state/province (or leave blank)" 10 40 --stdout)
@@ -31,9 +31,9 @@ function createcert() {
 		commonName=$(dialog --title "Distinguished name" --inputbox "Please enter a subject CommonName" 10 40 --stdout)
 		emailadd=$(dialog --title "Distinguished name" --inputbox "Please enter an email address (or leave blank)" 10 40 --stdout)
 		clear
-		echo "Cert type: $certtype"
-		echo "CA cert:   $1"
-		echo "CA key:    $2"
+		#echo "Cert type: $certtype"
+		#echo "CA cert:   $1"
+		#echo "CA key:    $2"
 
 		if [[ $certtype ]]; then
 			ls /tmp/certtool &> /dev/null || mkdir /tmp/certtool &> /dev/null
@@ -72,6 +72,10 @@ function createcert() {
     			echo "[v3_req]" >> $filen
     			echo "keyUsage = keyEncipherment, dataEncipherment" >> $filen
     			echo "extendedKeyUsage = clientAuth" >> $filen
+    			# Make certs
+    			openssl genrsa -out "$certname.key" 2048
+				openssl req -sha512 -new -key "$certname.key" -out "$certname.csr" -config $filen
+				openssl x509 -req -in "$certname.csr" -CA $1 -CAkey $2 -CAcreateserial -out "$certname.crt" -days 1825 -sha512 -extensions v3_req -extensions usr_cert -extfile $filen
 			fi
 			if [[ $certtype -eq 2 ]]; then
 				# serverAuth cert
@@ -102,6 +106,10 @@ function createcert() {
     				done
     				count=1
 				fi
+				# Make certs
+				openssl genrsa -out "$certname.key" 2048
+				openssl req -sha512 -new -key "$certname.key" -out "$certname.csr" -config $filen
+				openssl x509 -req -in "$certname.csr" -CA $1 -CAkey $2 -CAcreateserial -out "$certname.crt" -days 1825 -sha512 -extensions v3_req -extfile $filen
 			fi
 			if [[ $certtype -eq 3 ]]; then
 				# clientAuth and serverAuth
@@ -118,13 +126,14 @@ function createcert() {
     			echo "[v3_req]" >> $filen
     			echo "keyUsage = keyEncipherment, dataEncipherment" >> $filen
     			echo "extendedKeyUsage = serverAuth, clientAuth" >> $filen
+    			# Make certs
+    			openssl genrsa -out "$certname.key" 2048
+				openssl req -sha512 -new -key "$certname.key" -out "$certname.csr" -config $filen
+				openssl x509 -req -in "$certname.csr" -CA $1 -CAkey $2 -CAcreateserial -out "$certname.crt" -days 1825 -sha512 -extensions usr_cert -extensions v3_req -extfile $filen
 			fi
 		fi
 
-		openssl genrsa -out "$certname.key" 2048
-		openssl req -sha512 -new -key "$certname.key" -out "$certname.csr" -config $filen
-		openssl x509 -req -in "$certname.csr" -CA $1 -CAkey $2 -CAcreateserial -out "$certname.crt" -days 1825 -sha512 -extensions v3_req -extfile $filen
-
+		
 		#echo "" > $filen
 
 	fi
