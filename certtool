@@ -1,0 +1,130 @@
+#!/bin/bash
+
+function createca {
+	cdir="$(pwd)"
+
+	echo $cdir
+	#ls output &> /dev/null || mkdir output &> /dev/null
+
+	caname=$(dialog --title "Cert name" --inputbox "Please enter a name for the certificate (no extensions):" 40 40 --stdout)
+	clear
+	#ls $caname &> /dev/null || mkdir $caname &> /dev/null
+
+	openssl genrsa -out "$cdir/$caname.key" 2048
+	openssl req -x509 -new -nodes -key ca.key -sha512 -days 1825 -out "$cdir/$caname.crt"
+
+
+}
+
+function createcert() {
+	# CA cert, CA key, read-cert-details
+	if [[ ! -z "$1" && ! -z "$2" ]]; then
+		#ls output &> /dev/null || mkdir output &> /dev/null
+		certtype=$(dialog --title "Select cert type" --menu "Please select the type of certificate to generate:" 40 40 3 1 Client 2 Server 3 "Client & server" --stdout)
+		certname=$(dialog --title "Cert name" --inputbox "Please enter a name for the certificate (no extensions):" 40 40 --stdout)
+		country=$(dialog --title "Distinguished name" --inputbox "Please enter a country (2 char min, or leave blank)" 10 40 --stdout)
+		stateProv=$(dialog --title "Distinguished name" --inputbox "Please enter a state/province (or leave blank)" 10 40 --stdout)
+		locality=$(dialog --title "Distinguished name" --inputbox "Please enter a locality/city (or leave blank)" 10 40 --stdout)
+		postcode=$(dialog --title "Distinguished name" --inputbox "Please enter a postcode (or leave blank)" 10 40 --stdout)
+		orgName=$(dialog --title "Distinguished name" --inputbox "Please enter a company/organisation name" 10 40 --stdout)
+		orgUnit=$(dialog --title "Distinguished name" --inputbox "Please enter an organisational unit" 10 40 --stdout)
+		commonName=$(dialog --title "Distinguished name" --inputbox "Please enter a subject CommonName" 10 40 --stdout)
+		emailadd=$(dialog --title "Distinguished name" --inputbox "Please enter an email address (or leave blank)" 10 40 --stdout)
+		clear
+		echo "Cert type: $certtype"
+		echo "CA cert:   $1"
+		echo "CA key:    $2"
+
+		if [[ $certtype ]]; then
+			ls /tmp/certtool &> /dev/null || mkdir /tmp/certtool &> /dev/null
+			filen="/tmp/certtool/$certname.conf"
+			echo ""> $filen
+			cat $filen
+
+			echo "[req]" >> $filen
+    		echo "distinguished_name = req_distinguished_name" >> $filen
+    		echo "req_extensions = v3_req" >> $filen
+    		echo "prompt = no" >> $filen
+    		echo "" >> $filen
+    		echo "[req_distinguished_name]" >> $filen
+
+			if [[ $country ]]; then echo "countryName = $country" >> $filen; fi
+			if [[ $stateProv ]]; then echo "stateOrProvinceName = $stateProv" >> $filen; fi
+			if [[ $locality ]]; then echo "localityName = $locality" >> $filen; fi
+			if [[ $postcode ]]; then echo "postalCode = $postcode" >> $filen; fi
+			if [[ $orgName ]]; then echo "organizationName = $orgName" >> $filen; fi
+			if [[ $orgUnit ]]; then echo "organizationalUnitName = $orgUnit" >> $filen; fi
+			if [[ $commonName ]]; then echo "commonName = $commonName" >> $filen; fi
+			if [[ $emailadd ]]; then echo "emailAddress = $emailadd" >> $filen; fi
+
+			if [[ $certtype -eq 1 ]]; then
+				# clientAuth cert
+				echo "" >> $filen
+				echo "[ usr_cert ]" >> $filen
+				echo "basicConstraints = CA:FALSE" >> $filen
+				echo "nsCertType = client" >> $filen
+    			echo "nsComment = \"OpenSSL Client Certificate\"" >> $filen
+    			echo "subjectKeyIdentifier = hash" >>$filen
+    			echo "authorityKeyIdentifier = keyid,issuer:always" >> $filen
+    			echo "keyUsage = critical, digitalSignature, keyEncipherment, keyAgreement, nonRepudiation" >> $filen
+    			echo "extendedKeyUsage = clientAuth" >> $filen
+    			echo "" >> $filen
+    			echo "[v3_req]" >> $filen
+    			echo "keyUsage = keyEncipherment, dataEncipherment" >> $filen
+    			echo "extendedKeyUsage = clientAuth" >> $filen
+			fi
+			if [[ $certtype -eq 2 ]]; then
+				# serverAuth cert
+				echo "server"
+			fi
+			if [[ $certtype -eq 3 ]]; then
+				# clientAuth and serverAuth
+				echo "" >> $filen
+				echo "[ usr_cert ]" >> $filen
+				echo "basicConstraints = CA:FALSE" >> $filen
+				echo "nsCertType = client, server" >> $filen
+    			echo "nsComment = \"OpenSSL Client Certificate\"" >> $filen
+    			echo "subjectKeyIdentifier = hash" >>$filen
+    			echo "authorityKeyIdentifier = keyid,issuer:always" >> $filen
+    			echo "keyUsage = critical, digitalSignature, keyEncipherment, keyAgreement, nonRepudiation" >> $filen
+    			echo "extendedKeyUsage = serverAuth, clientAuth" >> $filen
+    			echo "" >> $filen
+    			echo "[v3_req]" >> $filen
+    			echo "keyUsage = keyEncipherment, dataEncipherment" >> $filen
+    			echo "extendedKeyUsage = serverAuth, clientAuth" >> $filen
+
+			fi
+
+		fi
+
+		openssl genrsa -out "$certname.key" 2048
+		openssl req -sha512 -new -key "$certname.key" -out "$certname.csr" -config $filen
+		openssl x509 -req -in "$certname.csr" -CA $1 -CAkey $2 -CAcreateserial -out "$certname.crt" -days 1825 -sha512 -extensions v3_req -extfile $filen
+
+		echo "" > $filen
+
+	fi
+
+}
+
+
+certtype=$(dialog --title "Select cert type" --menu "Please select the type of certificate to generate:" 40 40 2 1 CA 2 Client/server --stdout)
+echo $certtype
+if [[ $certtype -eq 1 ]]; then
+	createca
+elif [[ $certtype -eq 2 ]]; then
+	$opt "$#"
+	echo "$0 $1"
+	if [[ "$#" = 2 ]]; then
+		createcert $1 $2
+	else
+		echo "Usage: certtool ca.crt ca.key"
+		clear
+	fi
+	#createcert $1 $2
+fi
+
+
+
+
+#createcert ca.crt ca.key client1
