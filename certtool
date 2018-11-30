@@ -11,7 +11,7 @@ function createca {
 	#ls $caname &> /dev/null || mkdir $caname &> /dev/null
 
 	openssl genrsa -out "$cdir/$caname.key" 2048
-	openssl req -x509 -new -nodes -key ca.key -sha512 -days 1825 -out "$cdir/$caname.crt"
+	openssl req -x509 -new -nodes -key "$cdir/$caname.key" -sha512 -days 1825 -out "$cdir/$caname.crt"
 
 
 }
@@ -22,7 +22,7 @@ function createcert() {
 		#ls output &> /dev/null || mkdir output &> /dev/null
 		certtype=$(dialog --title "Select cert type" --menu "Please select the type of certificate to generate:" 40 40 3 1 Client 2 Server 3 "Client & server" --stdout)
 		certname=$(dialog --title "Cert name" --inputbox "Please enter a name for the certificate (no extensions):" 40 40 --stdout)
-		country=$(dialog --title "Distinguished name" --inputbox "Please enter a country (2 char min, or leave blank)" 10 40 --stdout)
+		country=$(dialog --title "Distinguished name" --inputbox "Please enter a country (2 chars only, or leave blank)" 10 40 --stdout)
 		stateProv=$(dialog --title "Distinguished name" --inputbox "Please enter a state/province (or leave blank)" 10 40 --stdout)
 		locality=$(dialog --title "Distinguished name" --inputbox "Please enter a locality/city (or leave blank)" 10 40 --stdout)
 		postcode=$(dialog --title "Distinguished name" --inputbox "Please enter a postcode (or leave blank)" 10 40 --stdout)
@@ -76,6 +76,32 @@ function createcert() {
 			if [[ $certtype -eq 2 ]]; then
 				# serverAuth cert
 				echo "server"
+				subaltdns=$(dialog --title "SAN" --inputbox "Please enter any sub alt name - DNS (seperated by commas 'dns1,dns2,dns3'):" 10 60 --stdout)
+				subaltip=$(dialog --title "SAN" --inputbox "Please enter any sub alt names - IPv4 (seperated by commas '1.1.1.1,2.2.2.2'):" 40 40 --stdout)
+				clear
+				echo "" >> $filen
+    			echo "[v3_req]" >> $filen
+    			echo "keyUsage = keyEncipherment, dataEncipherment" >> $filen
+    			echo "extendedKeyUsage = serverAuth" >> $filen
+    			if [[ $subaltdns || $subaltip ]]; then echo "subjectAltName = @alt_names" >> $filen; echo "" >> $filen; echo "[alt_names]" >> $filen; fi
+    			if [[ $subaltdns ]]; then
+    				IFS=',' read -r -a arrdns <<< "$subaltdns"
+    				count=1
+    				for i in "${arrdns[@]}"; do
+    					echo "DNS.$count = $i" >> $filen
+    					((count+=1))
+    				done
+    				count=1
+    			fi
+    			if [[ $subaltip ]]; then 
+    				IFS=',' read -r -a arrip <<< "$subaltip"
+    				count=1
+    				for i in "${arrip[@]}"; do
+    					echo "IP.$count = $i" >> $filen
+    					((count+=1))
+    				done
+    				count=1
+				fi
 			fi
 			if [[ $certtype -eq 3 ]]; then
 				# clientAuth and serverAuth
@@ -92,16 +118,14 @@ function createcert() {
     			echo "[v3_req]" >> $filen
     			echo "keyUsage = keyEncipherment, dataEncipherment" >> $filen
     			echo "extendedKeyUsage = serverAuth, clientAuth" >> $filen
-
 			fi
-
 		fi
 
 		openssl genrsa -out "$certname.key" 2048
 		openssl req -sha512 -new -key "$certname.key" -out "$certname.csr" -config $filen
 		openssl x509 -req -in "$certname.csr" -CA $1 -CAkey $2 -CAcreateserial -out "$certname.crt" -days 1825 -sha512 -extensions v3_req -extfile $filen
 
-		echo "" > $filen
+		#echo "" > $filen
 
 	fi
 
@@ -113,18 +137,13 @@ echo $certtype
 if [[ $certtype -eq 1 ]]; then
 	createca
 elif [[ $certtype -eq 2 ]]; then
-	$opt "$#"
-	echo "$0 $1"
 	if [[ "$#" = 2 ]]; then
+		clear
 		createcert $1 $2
 	else
-		echo "Usage: certtool ca.crt ca.key"
 		clear
+		echo "Usage: certtool ca.crt ca.key"
 	fi
 	#createcert $1 $2
 fi
-
-
-
-
 #createcert ca.crt ca.key client1
